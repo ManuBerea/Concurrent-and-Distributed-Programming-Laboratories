@@ -1,2 +1,2 @@
-# Programare_Concurenta_si_Distribuita-Berea_Manuela
-Temele lucrate in cadrul laboratorului de Programare Concurenta si Distribuita, Master Anul 1 - Ingineria Sistemelor Software FII UAIC
+# Concurrent and Distributed Programming Laboratories - Berea Manuela
+The homework worked on the laboratory of Concurrent and Distributed Programming, Master Year 1 - Software Systems Engineering FII UAIC
