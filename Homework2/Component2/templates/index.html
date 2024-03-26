@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@400;500&display=swap" rel="stylesheet">
+    <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"
+            integrity="sha384-c79GN5VsunZvi+Q/WObgk2in0CbZsHnjEqvFxC5DxHn9lTfNce2WW6h2pH6u/kF+"
+            crossorigin="anonymous"></script>
+    <title>Real-time Feedback Application</title>
+    <style>
+        body {
+            font-family: 'Roboto', sans-serif;
+            margin: 0;
+            background-color: #eeeeee;
+            text-align: center;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            flex-wrap: wrap;
+            gap: 30px;
+            padding: 50px 0 0;
+        }
+
+        .container, .reviews-container {
+            background-color: #fff;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 450px;
+            margin: 0;
+            padding: 25px;
+            height: 725px;
+        }
+
+        .reviews-container {
+            width: 100%;
+            max-width: 450px;
+            margin: 0;
+            padding: 25px;
+            height: 725px;
+            text-align: left;
+            display: flex;
+            flex-direction: column;
+        }
+
+        h1 {
+            color: #005a87;
+            font-weight: 700;
+            margin-bottom: 30px;
+        }
+
+        h2 {
+            color: #333;
+            font-size: 24px;
+            font-weight: 700;
+            margin-bottom: 15px;
+        }
+
+        form > label, .review-item > p {
+            text-align: left;
+            display: block;
+            margin: 15px 0;
+        }
+
+        input, textarea, button, select {
+            width: 100%;
+            padding: 15px;
+            margin-bottom: 15px;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+            box-sizing: border-box;
+        }
+
+        button {
+            background-color: #28a745;
+            color: #ffffff;
+            font-size: 18px;
+            border: none;
+            cursor: pointer;
+            transition: background-color 0.3s ease;
+        }
+
+        button:hover, button:focus {
+            background-color: #218838;
+        }
+
+        .review-item {
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 0 10px;
+            border-radius: 5px;
+            margin: 0 5px 0 10px;
+        }
+
+        .review-item strong {
+            color: #212529;
+        }
+
+        .reviews-container__reviews {
+            display: flex;
+            flex-direction: column;
+            gap:10px;
+            overflow-y: auto;
+        }
+
+        .reviews-container__reviews::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .reviews-container__reviews::-webkit-scrollbar-thumb {
+            background-color: #c0c0c0;
+            border-radius: 3px;
+        }
+
+        .reviews-container__reviews::-webkit-scrollbar-thumb:hover {
+            background-color: #a0a0a0;
+        }
+
+        .reviews-container__reviews::-webkit-scrollbar-track {
+            background-color: #f8f9fa;
+        }
+
+        #AvgRatings {
+            margin-bottom: 20px;
+
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            padding: 15px;
+            border-radius: 5px;
+        }
+
+        .ratings-container p {
+            margin: 5px 0;
+        }
+
+        .review-rating {
+            display: grid;
+            grid-template-columns: 20% 70% 10%;
+            align-items: center;
+        }
+
+        .review-rating > :nth-child(3) {
+            padding-left: 5px;
+        }
+
+        .review-rating__bar {
+            width: 100%;
+            height: 15px;
+            background-color: #ddd;
+            position: relative;
+            border-radius: 10px;
+        }
+
+        .bar__fill {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            background-color: #f8a300;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <h1>Restaurant Review Form</h1>
+    <form id="reviewForm">
+        <label for="restaurantChoice">Choose a restaurant to review:</label>
+        <select id="restaurantChoice" name="restaurant_id" required onchange="handleRestaurantSelection()"></select>
+
+        <input type="hidden" id="userId" name="user_id" />
+
+        <label for="ambiance">Ambiance Rating:</label>
+        <input type="number" id="ambiance" name="ambiance" min="1" max="5" required>
+
+        <label for="foodQuality">Food Quality Rating:</label>
+        <input type="number" id="foodQuality" name="food_quality" min="1" max="5" required>
+
+        <label for="service">Service Rating:</label>
+        <input type="number" id="service" name="service" min="1" max="5" required>
+
+        <label for="comment">Comment:</label>
+        <textarea id="comment" name="comment" required></textarea>
+
+        <button type="submit">Submit Review</button>
+    </form>
+</div>
+
+<div class="reviews-container">
+    <h1>User Reviews</h1>
+
+    <div id="AvgRatings"></div>
+
+    <div id="reviews" class="reviews-container__reviews"></div>
+</div>
+
+<script>
+
+    const API_URL = "https://flask-app-test-3v7edvfpxq-lm.a.run.app";
+    let socket;
+    let avgRatings;
+
+    try {
+        socket = io.connect(API_URL + ":443");
+    } catch (e) {
+        console.error("Socket.IO connection failed:", e);
+    }
+
+    if (socket) {
+        socket.on('feedback_update', function(data_json) {
+            console.log("Received feedback update:", data_json);
+            addReviewToPage(data_json);
+        });
+    } else {
+        console.error("Socket not defined - cannot set up socket event listeners");
+    }
+
+    function addReviewToPage(review) {
+        const reviewsContainer = document.getElementById('reviews');
+        const reviewDiv = document.createElement('div');
+        reviewDiv.className = 'review-item';
+
+        // Extract the necessary details from review object
+        const { feedback } = review;
+        const { ambiance, food_quality, service, comment } = feedback;
+        const restaurant_name = review.feedback.restaurant_name;
+
+        reviewDiv.innerHTML = `
+            <p><strong>Restaurant Name:</strong> ${restaurant_name}</p>
+            <p><strong>Rating:</strong> Ambiance: ${ambiance}, Food Quality: ${food_quality}, Service: ${service}</p>
+            <p><strong>Comment:</strong> ${comment}</p>
+        `;
+
+        reviewsContainer.appendChild(reviewDiv);
+    }
+
+
+    document.getElementById('reviewForm').addEventListener('submit', function(event) {
+        event.preventDefault();
+
+        const restaurantId = document.getElementById('restaurantChoice').value;
+        const ambiance = document.getElementById('ambiance').value;
+        const foodQuality = document.getElementById('foodQuality').value;
+        const service = document.getElementById('service').value;
+        const comment = document.getElementById('comment').value;
+
+        const reviewData = {
+            restaurant_id: restaurantId,
+            feedback: {
+                ambiance: parseInt(ambiance, 10),
+                food_quality: parseInt(foodQuality, 10),
+                service: parseInt(service, 10),
+                comment: comment
+            }
+        };
+
+        fetch(API_URL  + "/submit", {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(reviewData)
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.status === 'success') {
+                console.log('Review submitted successfully!');
+                alert('Review submitted successfully');
+                document.getElementById('reviewForm').reset();
+            } else {
+                console.error('Failed to submit review:', data.message);
+                alert('Failed to submit review');
+            }
+        })
+        .catch(error => {
+            console.error('Error submitting review: ', error);
+            alert('Error submitting review');
+        });
+    });
+
+    async function fetchAndPopulateRestaurants() {
+        try {
+            const response = await fetch(API_URL + '/allRestaurants');
+            const restaurants = await response.json();
+            const restaurantSelect = document.getElementById('restaurantChoice');
+
+            restaurantSelect.innerHTML = '';
+
+            restaurants.forEach(restaurant => {
+                const option = document.createElement('option');
+                option.value = restaurant.id;
+                option.textContent = restaurant.name;
+                restaurantSelect.appendChild(option);
+            });
+        } catch (error) {
+            console.error('Error fetching restaurants:', error);
+        }
+    }
+
+    async function fetchAndDisplayReviews() {
+        try {
+            const response = await fetch(API_URL + '/allReviews');
+            const reviews = await response.json();
+            const reviewsContainer = document.getElementById('reviews');
+
+            reviewsContainer.innerHTML = '';
+
+            reviews.forEach(review => {
+                const reviewDiv = document.createElement('div');
+                reviewDiv.className = 'review-item';
+                reviewDiv.innerHTML = `<p><strong>Restaurant name: </strong> ${review.restaurant_name}</p>
+                    <p><strong>Rating:</strong> Ambiance: ${review.ambiance}, Food Quality: ${review.food_quality}, Service: ${review.service}</p>
+                    <p><strong>Comment:</strong> ${review.comment}</p>
+                `;
+                reviewsContainer.appendChild(reviewDiv);
+            });
+
+        } catch (error) {
+            console.error('Error fetching reviews:', error);
+        }
+    }
+
+    async function fetchAvgRatings() {
+        try {
+            const response = await fetch(API_URL + '/avgRatings');
+            avgRatings = await response.json();
+            handleRestaurantSelection();
+        } catch (error) {
+            console.error('Error fetching average ratings:', error);
+        }
+    }
+
+    function handleRestaurantSelection() {
+        const restaurantId = document.getElementById('restaurantChoice').value;
+
+        for (const element of avgRatings) {
+            if (element.id === restaurantId) {
+                const { avgAmbiance, avgFood, avgService, avgRating, revCount, name, keywords } = element;
+                UpdateAvgRatings(name, avgAmbiance, avgFood, avgService, avgRating, revCount, keywords);
+                break;
+            }
+        }
+    }
+
+    function UpdateAvgRatings(restaurantName, ambianceValue, foodQualityValue, serviceValue, avgRatingValue, ratingsCount, keywords = undefined) {
+        const existingDiv = document.getElementById('AvgRatings');
+
+        existingDiv.innerHTML =`
+            <p><strong>Restaurant Name:</strong> ${restaurantName}</p>
+            <p><strong>Ratings count: </strong>${ratingsCount}</p><p> <strong>Averages:</strong></p>
+            <div class="ratings-container">
+                <div class="review-rating">
+                    <p>Average Rating</p>
+                    <div class="review-rating__bar">
+                        <span class="bar__fill" style="width: ${avgRatingValue * 20}%"></span>
+                    </div>
+                    <p>${avgRatingValue}</p>
+                </div>
+                <div class="review-rating">
+                    <p>Ambiance</p>
+                    <div class="review-rating__bar">
+                        <span class="bar__fill" style="width: ${ambianceValue * 20}%"></span>
+                    </div>
+                    <p>${ambianceValue}</p>
+                </div>
+                <div class="review-rating">
+                    <p>Food Quality</p>
+                    <div class="review-rating__bar">
+                        <span class="bar__fill" style="width: ${foodQualityValue * 20}%"></span>
+                    </div>
+                    <p>${foodQualityValue}</p>
+                </div>
+                <div class="review-rating">
+                    <p>Service</p>
+                    <div class="review-rating__bar">
+                        <span class="bar__fill" style="width: ${serviceValue * 20}%"></span>
+                    </div>
+                    <p>${serviceValue}</p>
+                </div>
+                ${keywords !== undefined ? `
+                    <div class="review-rating">
+                        <p><strong>Keywords:</strong> </p>
+                        <p>${keywords.map(word => word.trim()).join(', ')}</p>
+                    </div>` : ''
+                }
+            </div>
+        `;
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        fetchAndPopulateRestaurants();
+        fetchAndDisplayReviews();
+        fetchAvgRatings();
+    });
+</script>
+
+</body>
+</html>
