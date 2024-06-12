@@ -1,2 +1,2 @@
-# Concurrent and Distributed Programming Laboratories - Berea Manuela
-The homework worked on the laboratory of Concurrent and Distributed Programming, Master Year 1 - Software Systems Engineering FII UAIC
+# Distributed, real-time feedback and analytics system for restaurants
+This system allows users to give instant feedback on restaurants and receive real-time analytics about the reviews. It utilizes Cloud Scheduler, Cloud Functions, Firestore, DataProc, Cloud Run, and Pub/Sub with a client-server and event-driven architecture.
